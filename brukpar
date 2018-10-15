@@ -1,0 +1,67 @@
+#! /bin/sh
+#
+# brukpar : extract one parameter from the acqus file
+# usage for single parameter: 'brukpar acqus'
+# Mark Foster; TSRI 1-1996
+#
+#nawk 'BEGIN{
+awk 'BEGIN{
+
+if ( ARGC != 1 ) {
+	file1 = "acqus"
+	print
+	print "AWK script for extracting a single parameter from acqus file"
+	print "By default, using ./acqus ....."
+	print "	Usage: brukpar acqus"
+	print " brukpar> TD => TD = 1024 ; par D 0 => D0 = 4e-06 "
+	print
+	}
+else file1 = "'$1'"
+
+print " Enter NMR parameters to extract from file " file1
+printf "brukpar> "
+}
+$1 ~/^#/{ print; next }
+{
+	cmd_menu( )
+	printf "brukpar> "
+	next
+}
+function cmd_menu( ) {
+	if ($1 ~/^#/)	return
+	else if ($1 ~/^exi|^qui|^bye/)  exit
+	else if ( NF == 1 ) {
+		par = $1
+		getpar( par )
+	}
+	else if ( NF == 2 ) {
+		par = $1
+		element = $2
+		getarray( par, element )
+	}
+	return;
+}
+function getpar( par ) {
+	s = "##$" par "="
+	while ( getline < file1 > 0 ) {
+		if ( $1 == s ) { print par, "=", $2 }
+		}
+	close( file1 )
+	return
+}
+function getarray( par, element  ) {
+	s = "##$" par "="
+	while ( getline < file1 > 0 ) {
+		if ( $1 == s ) {
+			label = $0
+			RS = "##"
+			getline < file1
+			if ( NF < element ) {print label}
+			else  { print par element, "=", $(element + 1) }
+			RS = "\n"
+		}
+	}
+	close( file1 )
+	return
+}
+'

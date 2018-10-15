@@ -1,0 +1,38 @@
+awk 'BEGIN{
+# single to three-letter code translation
+        t["ALA"] = "A"
+        t["VAL"] = "V"
+        t["LEU"] = "L"
+        t["ILE"] = "I"
+        t["GLY"] = "G"
+        t["PRO"] = "P"
+        t["SER"] = "S"
+        t["THR"] = "T"
+        t["CYS"] = "C"
+        t["MET"] = "M"
+        t["HIS"] = "H"
+        t["ASP"] = "D"
+        t["ASN"] = "N"
+        t["GLU"] = "E"
+        t["GLN"] = "Q"
+        t["LYS"] = "K"
+        t["ARG"] = "R"
+        t["PHE"] = "F"
+        t["TYR"] = "Y"
+        t["TRP"] = "W"
+}
+{
+if ($0 ~ /gi/) print "#", $0 
+else {
+#	l = length( $0 )
+#	for (i = 1; i <= l; i++) {
+#		res =  substr( $1, i, 1 ) 
+		res =  substr( $1, i, 3 ) 
+		RES = toupper( res )
+		if (! (RES in t) ) 
+			print "Error: not a three letter AA code"
+	        print t[ RES ]
+#	        print RES, t[ RES ]
+#		}
+	}
+}' $*

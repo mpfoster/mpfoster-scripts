@@ -1,0 +1,43 @@
+#! /bin/sh
+#
+# par : extract one parameter from the acqus file
+# usage for single parameter: 'par <param>'
+# usage for array parameter" 'par <param> <index>'
+# Mark Foster; TSRI 1-1996
+#
+awk 'BEGIN{
+
+if ( ARGC < 2 ) {
+	print
+	print "AWK script for extracting a single parameter from acqus file"
+	print "	Usage: par PARAMETER or par PARAMETER INDEX "
+	print " par TD => TD = 1024 ; par D 0 => D0 = 4e-06 "
+	print
+	}
+
+file1 = "acqus"
+
+par = "##$" ARGV[1] "="
+#par = ARGV[1]
+
+#print file1, par, ARGC
+	if ( ARGC == 2 ) {
+		while ( getline < file1 > 0 ) {
+	
+			if ( $1 == par ) { print file1, ARGV[1], "=", $2 }
+			}
+	}
+	if ( ARGC == 3 ) {
+	
+		element = ARGV[2] + 1
+
+		while (getline < file1 > 0 ) {
+			if ( $1 == par ) {
+				RS = "##"
+				getline < file1
+				print file1, ARGV[1] ARGV[2], "=", $(element)
+			}
+		}
+	}
+}
+' $*

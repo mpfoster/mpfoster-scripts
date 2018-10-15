@@ -1,0 +1,33 @@
+#! /bin/sh
+# get_HN_dav
+# program to calculate weighted average chemical shift change 
+# per residue from H and N shifts.
+# Garrett et al. Biochemistry (1997) 36, 4393-4398
+# usage: % get_HN_dav file.diff > file.dav
+# Input is table with both shifts on line with atom:
+#	resnum resname atoms shift1 shit2
+# offsets are for considering systematic chemical shift differences
+awk 'BEGIN{
+	if (ARGC < 2) {print "usage: % get_HN_dav file.diff > file.dav"; exit}
+	N_off = 0.0 
+	H_off = 0.0
+}
+$3 ~ /^N$|^NN$|^HN$|^H$|^HA|CA|CB/ { atom[$1 $3] = $1 FS $2 FS $3 ; res[$1] = $2}
+$3 ~ /^N$|^NN$/ { diff[$1 "N"] = $(NF) - N_off }
+$3 ~ /^H$|^HN$/ { diff[$1 "H"] = $(NF) - H_off }
+END{
+  for (i in res){
+	if (diff[i "H"] != "" && diff[i "N"] != ""){
+	  dav[i] = ( ( (diff[i "H"])^2 + ((diff[i "N"])^2)/25 )/2 )^0.5
+	  if ( dav[i] > dmax ) dmax = dav[i]
+	}
+  }
+  printf("%10s %7s %7s %7s %7s\n", "# RESIDUE"," H_diff"," N_diff"," Dav"," Dav/Dmax")
+  for (i in dav){
+	if (diff[i "H"] != "" && diff[i "N"] != ""){
+	  printf("%5d %5s %7.3f %7.3f %7.3f %7.3f\n", i, res[i],
+	  diff[i "H"], diff[i "N"], dav[i], dav[i]/dmax) \
+		| "sort -n "
+	} 
+  }
+}' $*

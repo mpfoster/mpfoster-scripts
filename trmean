@@ -1,0 +1,100 @@
+#!/bin/sh
+# usage trmean trim=n (file)
+# n is the % of dta to be trimmed (e.g., trim=10: 10 %)
+# Calculates a statistically "trimmed" mean 
+# based on a script originally written by Ishwar Radhakrishan
+# for analysis of relaxation data
+# script assumes an index in field 1 and the data to be analyzed
+# in the last field, but will work w/ a single field
+# MF 07-10-01
+awk 'BEGIN{
+	if (trim == "") trim = 10
+}
+{
+   if ( $1 ~ /^#/ || NF == 0) next
+   data = data FS $(NF)
+   absdata = absdata FS abs($NF)
+}
+END{
+   print "#n, high, low", nhl(data)
+   ntrim = int(split(data,a)*trim/100)
+   print "# Trimming", trim, "% of values:", ntrim
+   for (j=1; j <= ntrim; j++){
+	print "#", j "/" ntrim, "nhl", nhl(data)
+	print "# mean", mean(data), "rmsd", rmsd(data),
+	   "# abs_mean", absmean(data), "abs_rmsd", absrmsd(data)
+	data = excludedeviant(data)
+   }
+   print trim "% trimmed num, high, low", nhl(data)
+   print "mean:", mean(data), "stdev:", rmsd(data),
+    "abs_mean", absmean(data), "abs_rmsd", absrmsd(data)
+}
+function excludedeviant(a){
+	array = ""
+	trimmed = "no"
+	maxdev = 0
+        num=split(a,A)
+	jmean = absmean(a)
+        for ( k = 1; k <= num; k++ ) {
+	    dev[k] = abs(A[k] - jmean)
+	    if (dev[k] > maxdev) maxdev = dev[k]
+	}
+        for ( k = 1; k <= num; k++ ) {
+		if ( abs(A[k] - jmean) == maxdev && trimmed == "no") {
+			print "# excluding", A[k]
+			trimmed = "yes"
+			continue
+		}
+		array = array FS A[k]
+	}
+	return sprintf("%s", array)
+}
+function abs(a){ return sqrt( a^2 ) }
+function nhl(a){
+        num=split(a,A)
+        if ( num < 2 ) return
+        high=A[1]; low=A[1]
+        for ( k = 1; k <= num; k++ ) {
+		if (A[k] > high) high = A[k]
+		if (A[k] < low) low = A[k]
+		}
+#        return sprintf("%5d, %5.3f, %5.3f", num, high, low )
+        return sprintf("%5d, %g, %g", num, high, low )
+}
+function mean(a){
+        num=split(a,A)
+        if ( num < 2 ) return
+        sum=0
+        for ( k = 1; k <= num; k++ ) sum += A[k]
+        return sprintf("%5.2f", (sum / num) )
+}
+function absmean(a){
+        num=split(a,A)
+        if ( num < 2 ) return
+        sum=0
+        for ( k = 1; k <= num; k++ ) sum += abs(A[k])
+        return sprintf("%5.2f", (sum / num) )
+}
+function rmsd(a){
+        num = split(a,A)
+        if ( num < 2 ) return
+        avg = mean(a)
+        sum=0
+        for ( k = 1; k <= num; k++ ) {
+                sqdev = (avg - A[k])^2
+                sum += sqdev
+        }
+        return sprintf("%.2f",sqrt( sum / num ) )
+}
+function absrmsd(a){
+        num = split(a,A)
+        if ( num < 2 ) return
+        avg = absmean(a)
+        sum=0
+        for ( k = 1; k <= num; k++ ) {
+                sqdev = (avg - A[k])^2
+                sum += sqdev
+        }
+        return sprintf("%.2f",sqrt( sum / num ) )
+}
+' $*

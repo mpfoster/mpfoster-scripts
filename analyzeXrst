@@ -1,0 +1,271 @@
+#! /usr/bin/awk -f
+# analyzeXrst list=file.list file.xplor file.pdb
+#	read an XPLOR-format RST file and a PDB file and analyze
+#	distances of protons involved in each rst.
+#	useful for evaluating ambiguous or non-stereoassigned rst
+# M. Foster 040301 modified 041603
+#awk 'BEGIN{
+BEGIN{
+
+if ( list == "" && ARGC < 2 || ARGC == 0 ) { 
+	print ""
+	print "awk script to compare an XPLOR RST file w/ some PDB files."
+	print "Reports atom pair distances, mean and rms distances by file,"
+	print "R^6 averaged distances by restraint, and bound violations."
+	print "Useful for evaluating ambiguous or non-stereoassigned RST."
+	print ""
+	print "	Usage: analyze_rst file.RST file.pdb ..."
+	print " to specify a file w/ a list of structures, use:"
+	print "	Usage: analyze_rst -v list=file.list file.RST"
+	print "   to see only violations, use -v vo=n, where n=cuttof"
+	exit
+}
+
+aformat = "%3d %-5s %-5s"
+
+
+print ""
+print "Comparing RST file with PDB coordinates...."
+print ""
+rstfile = ARGV[1]
+print "XPLOR restraint file:", rstfile
+
+if (vo != "") {
+	vo = sprintf("%g", vo)
+	print "vo flag set. Only mean violations > " vo " reported."
+}
+# collect the coordinate file names
+# check to see if file list
+if (list != ""){
+  while ( getline < list > 0 ) {
+	if (NF > 0 && $1 !~/^#/) file[++nfiles] = $1
+  }
+  close( list )
+}
+# otherwise read files from command line:
+else {
+  nfiles = (ARGC - 2)
+  for ( fnum = 1; fnum <= nfiles; fnum++) {
+  	file[fnum] = ARGV[ fnum + 1 ]
+#	print "File", fnum, file[fnum]
+  }
+}
+print "Reading", nfiles, "pdbfiles..."
+# read in the coordinates
+for ( fnum = 1; fnum <= nfiles; fnum++) {
+  print "File", fnum, file[fnum]
+  models++
+  while ( getline < file[fnum] > 0 ) {
+# in a multi-structure file, models are initiated by "MODEL" and
+# separated by "ENDMDL"
+# in addition all PDB files are terminated by "END"
+  if ($1 ~/MODEL/) multiflag="y"
+  if ($1 ~ /ATOM|HETATM/) {
+	atm_string[$5"."$3]=sprintf(aformat,$5,$4,$3)
+	atm[$5"."$3]=sprintf("%s.%s",$5,$3)
+ 	xyz[models,$5"."$3]=$6 FS $7 FS $8
+#	continue
+  }
+  if ($1 ~/END/ && multiflag == "y") {
+	models++
+  }
+}
+close( file[fnum] )
+}
+# to correct for the fact that each file ends w/ "END"
+#  models = models-1
+  if (multiflag == "y") models=models-nfiles
+  print "Read in " nfiles, "pdb files and", models, "models"
+
+  while ( getline < rstfile > 0 ) {
+	if ( $1 != "assign" ) { continue }
+	if ( $1 == "assign" ) {
+	rst++
+	first = ""
+	second = ""
+	atom = ""
+	split($0, all, ")" )
+	split( all[1],A, "(" )
+	split( all[2],B, "(" )
+	first_atoms = get_atoms( A[2] )
+	second_atoms = get_atoms( B[2] )
+	self_flag = check_self_noe( first_atoms, second_atoms )
+	if (self_flag == 1) continue
+	group1 = group( first_atoms )
+	m = split(group1, atom1)
+	group2 = group( second_atoms )
+	n = split( group2, atom2 )
+	split( all[3], bounds )
+	lol = bounds[1] - bounds[2]
+	upl = bounds[1] + bounds[3]
+#print "grp1:", group1, "grp2", group2, upl, lol
+	}
+
+	for ( i = 1; i <= m; i++ ) {		# loop for group1
+		for ( j = 1; j <= n; j++ ) {	# loop for group2
+		D = ""
+		  for (mnum = 1; mnum <= models; mnum++ ) {	# pdb files
+			dist = xyzdist( xyz[mnum,atom1[i]],xyz[mnum,atom2[j]] )
+			D = D FS sprintf("%6.2f", dist )
+			d[mnum] = d[mnum] FS dist
+		  }
+		  as[rst,i,j] = atm_string[ atom1[i] ] FS atm_string[ atom2[j] ] FS D FS "(" mean(D) "/" rmsd(D) ")"
+		}
+	} 
+	if ( (m * n) > 1 ) {
+	     r6d = ""
+    	     for (mnum = 1; mnum <= models; mnum++ ) {	# pdb files
+		     r6d = r6d FS sprintf("%6.2f", r6avg( d[mnum] ) )
+		     d[mnum] = ""
+	     }
+	     rsixd[rst] = sprintf("%31s %s ( %g / %g )", "R^6 average distance:", r6d, mean(r6d),rmsd(r6d))
+	     split(r6d,Z)
+	}
+	else if ( ( m*n ) == 1 ) split(D,Z)
+
+# report avg violations
+	     upviol = 0
+	     loviol = 0
+	     max_upv = 0
+	     sum_upv = 0
+	     max_lov = 0
+	     sum_lov = 0
+	     numZ = 0
+	     for ( z in Z ) {
+		     viol[z] = 0
+		     numZ++
+		     if ( Z[z] > upl ) {
+#			upviol = 1
+			viol[z] = Z[z] - upl
+			sum_upv += viol[z] 
+			max_upv = max(max_upv, viol[z])			
+		     }
+		     else if ( Z[z] < lol ) {
+#			loviol = 1
+			viol[z] = lol - Z[z]
+			sum_lov += viol[z]
+			max_lov = max(max_lov, viol[z])
+		     }
+	     }
+	     avg_upviol = sum_upv / numZ 	     	
+		if (avg_upviol > vo) upviol = 1
+	     avg_loviol = sum_lov / numZ
+		if (avg_loviol > vo) loviol = 1
+	     if ( vo == "" || (upviol == 1 || loviol ==1 )) {
+	print "------------------------------"
+	print "#", $0
+	print "Restraint", rst, ":", m "x" n, "lower:", lol, "upper:", upl
+		for (i = 1; i <= m; i++) 
+			for (j = 1; j <=n; j++) print as[rst,i,j]
+		if ( m > 1 || n > 1) print rsixd[rst]
+	     	if ( upviol == 1 ) print "\t ** RST", rst,
+			sprintf("Upper bound violation! Avg: +%.2f Max: +%.2f", avg_upviol, max_upv )
+	     	if ( loviol == 1 ) print "\t ** RST", rst, 
+			sprintf("Lower bound violation! Avg: -%.2f Max: -%.2f", avg_loviol, max_lov )	
+  	     }
+	continue
+  }
+  close( rstfile )
+}
+# functions:
+function group(a) {
+	split(a,b)
+	c = ""
+	for ( i in b ) { 
+	        if (b[i] ~ /\#|\*/) {
+		    b[i] = substr(b[i],1, length(b[i])-1)
+# check for b[i] (e.g., 5.hb, instead of 5.hb#) in atom list
+		    for ( a in atm ){
+			split(b[i],B, ".")
+			split(a,A, ".")
+			if (A[1] == B[1] && A[2] ~ B[2]) {
+			    c = c FS a
+#			    print a, b[i], c
+			}
+		    }
+		}
+		else c = c FS b[i]
+	}
+	return c
+}
+function vlen(a){split(a,A);return sqrt((A[1]^2)+(A[2]^2)+(A[3]^2))}
+function vsub(a,b){split(a,A);split(b,B);return B[1]-A[1] FS B[2]-A[2] FS B[3]-A[3]}
+function xyzdist(a,b){return vlen(vsub(a,b))}
+function r6avg(a){num=split(a,A); return ( (r6sum(a)/num )^(-1/6) ) }
+function r6sum(a){
+	sum=0
+	num=split(a,A)
+	for ( k = 1; k <= num; k++ ) sum += (A[k])^(-6)
+	return sum
+}
+function mean(a){
+	num=split(a,A)
+	if ( num < 2 ) return
+	sum=0
+	for ( k = 1; k <= num; k++ ) sum += A[k]
+	return sprintf("%5.2f", (sum / num) )
+}
+function rmsd(a){
+	num = split(a,A)
+	if ( num < 2 ) return
+	avg = mean(a)
+	sum=0
+	for ( k = 1; k <= num; k++ ) {
+		sqdev = (avg - A[k])^2
+		sum += sqdev
+	}
+	return sprintf("%.2f",sqrt( sum / num ) )
+}
+function max(m, n) {
+#	return m > n ? m : n
+	if (m > n) return( m )
+	else return( n )
+}
+function strip_parenthesis( a ){
+	if ( a ~ /\)/ ) return( substr(a,1,length(a)-1) )
+	else return( a )
+}
+function get_atoms( a ){
+    atoms = ""
+    sep = ""
+    oldatom = ""
+    n = split(a, A, "resid") - 1
+    for ( i = 1; i <= n; i++ ){
+	split(A[i+1],b)
+	res = b[1]
+	b[4] = strip_parenthesis( b[4] )
+	atom = res "." b[4]
+	atomname[atom] = b[4]
+	if (!( atom == oldatom )) { 
+	    if ( atoms != "" ) atoms = atoms FS atom
+	    else atoms = atom
+	}
+	oldatom = atom
+    }
+    return sprintf("%s", atoms)
+}    
+function translate( a ){
+    string = ""
+    n = split(a, A)
+    for ( i = 1; i <= n; i++){
+	if ( A[i] ~ /\./ ) {
+	    split(A[i], b, ".")
+	    A[i] = "resid " b[1] " and name " b[2]
+	    if ( i > 1 ) A[i] = "or" FS A[i]
+	}
+	string = string FS A[i]
+    }
+    return string
+}
+function check_self_noe( a, b ){
+    n = split(a, A)
+    m = split(b, B)
+    for (i = 1; i <= n; i++){
+	for (j = 1; j <= m; j++) {
+	    if ( A[i] == B[j] ) {
+		print "! Self NOE"
+		return 1
+	    }
+	}
+    }
+}

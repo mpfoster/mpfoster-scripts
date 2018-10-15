@@ -1,0 +1,59 @@
+#! /bin/sh
+# map2res_pm (for PyMol) 11/18/05, MF
+# from map2ca.awk script to generate a MOLMOL macro to color Ca atoms
+# based on a property. The input file shold be of a format:
+# index	value	error
+# usage: map2ca.awk scale=n base=m file.dat
+# n: normalize values to n; m: base value 
+# Foster 080502
+awk 'BEGIN{
+if (ARGC < 2) { 
+	print "# usage: map2ca scale=n base=m file.dat"
+	print "# n: normalize values to n; m: base value (neutral)"
+	print "# neutralc=f (0-1 rgb value for neutral), err=e (error)"
+	exit}
+SQ = sprintf("%c",39)
+if (scale == "") scale=1; if (base == "") base = 0.5
+if (neutralc == "") neutralc = 0.5
+#print "# Base color", base, "Normalized to", scale, "unasgc", unasgc
+#print "SelectAtom " SQ "@CA" SQ
+#neutralc = 0.7
+#print "ColorAtom " neutralc "," neutralc "," neutralc
+#if (unasgc == "red") unasgc= 1 "," 0.3 "," 0.3
+#if (unasgc == "" || unasgc == "green" ) unasgc= 0.3 "," 1 "," 0.3
+#else unasgc = neutralc
+# use grey for no data
+unasgc = "0.1,0.1,0.1"
+print "set_color unasgc=[" unasgc "]"
+print "color unasgc"
+}
+$1 !~/^#/ && NF > 0 {
+# check to make sure the diff betw value and base is greater than the error
+print "#", $0, "scale=", scale ", base=", base
+res = $1
+value = $2
+#value = $(NF)
+#if (err == "" ) err = $3
+#if (err < ( ((value-base)^2)^0.5 ) ) {
+#if (err/2 <  abs(value-base) ) {
+ colorf = ( (value-base)/scale ) * neutralc
+#	colorf = ( (value-base)/(scale-base) ) * neutralc
+if (value-base < 0) {
+	color = maxmin(neutralc+colorf) "," maxmin(neutralc-colorf) "," maxmin(neutralc-colorf)
+	}
+else if (value-base > 0) {
+	color = maxmin(neutralc+colorf) "," maxmin(neutralc+colorf) "," maxmin(neutralc-colorf)
+	}
+else { color = neutralc "," neutralc "," neutralc }
+print "set_color color_" res "=[" color "]"
+print "color color_" res ", " res "/" 
+}
+function maxmin(a){
+        if (a > 1) return 1
+        else if (a < 0) return 0
+        else return a
+}
+function abs(a){
+	if (a<0) return -a
+	else return a
+}' $*
