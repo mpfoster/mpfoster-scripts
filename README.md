@@ -1,6 +1,6 @@
 ## mpfoster-scripts
 # awk programs -- some were invoked using "nawk"; replace with "awk"
-(Some of these are old and may need to be updated for newer versions of awk, and never xpk and asg file formats)
+(Some of these are old and may need to be updated for newer versions of awk, and newer xpk and asg file formats)
  
          a2aaa  convert 1-letter codes to three-letter amino acid names
          aaa2a  convert 3-letter code to 1-leter codes
